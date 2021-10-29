@@ -1,0 +1,343 @@
+---
+title: "hw1_producing_features"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+# 1
+
+### Task 1.1 
+
+Import the tweet data from this link.
+
+```{r setup, include=FALSE}
+df <- read.csv("https://raw.githubusercontent.com/uo-datasci-specialization/c4-ml-fall-2021/main/data/tweet_sub.csv")
+
+library(tidyverse)
+library(lubridate)
+library(recipes)
+```
+
+### Task 1.2 
+
+The time variable in this dataset is a character string such as Thu Jun 18 07:35:01 PDT 2009. Create four new columns in the dataset using this time variable to show the day, date, month, and hour of a tweet. The table below provides some examples of how these four new columns would look like given time as a character string. Make sure that day column is a numeric variable from 1 to 7 (Monday = 1, Sunday =7), date column is a numeric variable from 1 to 31, and hour column is a numeric variable from 0 to 23, and month column is a factor variable. Calculate and print the frequencies for each new column (day, month, date, and hour).
+
+```{r}
+
+df = df %>% mutate(
+  date_format = parse_date_time(time, orders = '%a %b %d %T %Y'),
+  day = wday(date_format, week_start = 1),
+  month = factor(month(date_format)),
+  date = day(date_format),
+  hour = hour(date_format)
+  )
+
+head(df)
+str(df)
+```
+
+
+```{r}
+df %>% count(day)
+
+df %>% count(month)
+
+df %>% count(date)
+
+df %>% count(hour)
+```
+
+
+### Task 1.3
+
+Recode the outcome variable (sentiment) into a binary variable such that Positive is equal to 1 and Negative is equal to 0. Calculate and print the frequencies for tweets with positive and negative sentiments.
+
+```{r}
+
+df = df %>% mutate(
+  sentiment = ifelse(sentiment == 'Positive', 1, 0))
+
+```
+
+### Task 1.4 
+
+Load the reticulate package and Python libraries (torch, numpy, transformers, nltk, and tokenizers). Then, load the text package. Using these packages, generate tweet embeddings for each tweet in this dataset using the roberta-base model, a pre-trained NLP model. Tweet embeddings for each tweet should be a vector of numbers with length 768. Append these embeddings to the original data.
+
+*I ran this once and saved the variables in the environment. To increase speed, I am skipping the actual evaluation of this section of code and loaded the environment instead.*
+
+```{r, eval=FALSE}
+
+library(reticulate)
+path_to_env <- "/usr/local/anaconda3/envs/r.python/"
+use_condaenv(path_to_env)
+py_discover_config()
+
+import('numpy')
+import('transformers')
+import('nltk')
+import('tokenizers')
+import('torch')
+
+t = map(df$tweet, textEmbed, 
+                  model = 'roberta-base',
+                  layers = 12,
+                  context_aggregation_layers = 'concatenate')
+
+save.image(file='data/roberta-base_output.RData')
+```
+
+```{r}
+load("data/roberta-base_output.rdata")
+
+sentence_num = t(sapply(t, `[[`, 1)) %>% 
+  data.frame() %>% 
+  map_dfr(as.numeric) %>% 
+  mutate(match_id = rownames(df))
+
+df = df %>% mutate(match_id = rownames(df)) %>% 
+  inner_join(sentence_num, by = 'match_id')
+
+head(df)
+```
+
+### Task 1.5 
+
+Remove the two columns time and tweet from the dataset as you do not need them anymore.
+
+```{r}
+
+df = df %>% select(-c(tweet, time, date_format, match_id))
+
+```
+
+### Task 1.6 
+
+Prepare a recipe using the recipe() and prep() functions from the recipes package for final transformation of the variables in this dataset.
+
+```{r}
+outcome = c('sentiment')
+
+cylic <- c('day','date', 'hour')
+
+categorical <- c('month')
+
+numeric <- paste0('Dim',c(1:768))
+
+
+blueprint <- recipe(x  = df,
+                    vars  = c(numeric,cylic,categorical,outcome),
+                    roles = c(rep('predictor',ncol(df)-1),'outcome')) %>% 
+  # each cyclic variable (day, date, and hour) is recoded into two new variables of sin and cos terms.
+  step_harmonic(day, frequency = 1, cycle_size = 7) %>%
+  step_harmonic(date, frequency = 1, cycle_size = 31) %>% 
+  step_harmonic(hour, frequency = 1, cycle_size = 12) %>% 
+  # all numerical embeddings (Dim1 - Dim768) are standardized (?step_normalize)
+  step_normalize(all_of(numeric)) %>% 
+  # month variable is recoded into dummy variables using one-hot encoding (?step_dummy)
+  step_dummy(month,one_hot=TRUE)
+
+blueprint
+
+prepare <- prep(blueprint, 
+                training = df)
+```
+
+
+### Task 1.7 
+
+Finally, apply this recipe to the whole dataset and obtain the final version of the dataset with transformed variables. The final dataset should have 1500 rows and 781 columns as the following:
+
+```{r}
+baked_df <- bake(prepare, new_data = df)
+
+dim(baked_df)
+
+head(baked_df)
+```
+
+### Task 1.8 
+
+Remove the original day,date, and hour variables from the dataset as we do not need them anymore because we already created sin and cos terms for each one of them.
+
+```{r}
+baked_df = baked_df %>% select(-c(day, date, hour))
+```
+
+
+### Task 1.9 
+
+Export the final dataset (1500 x 778) as a .csv file and upload it to Canvas along your submission.
+
+```{r}
+
+write.csv(x=baked_df, file="data/hw1_data1_output.csv")
+
+```
+
+
+# 2
+
+### Task 2.1 
+
+Import the Oregon testing data
+
+```{r}
+
+df2 <- read.csv("https://raw.githubusercontent.com/uo-datasci-specialization/c4-ml-fall-2021/main/data/oregon.csv")
+
+```
+
+### Task 2.2 
+
+The tst_dt variable is a character string such as 5/14/2018 0:00. Create two new columns in the dataset using this variable to show the date and month the test was taken. The table below provides some examples of how these two new columns would look like given tsd_dt as a character string. Make sure that both date and month columns are a numeric variables. Once you create these two new columns, remove the colun tst_dt from the dataset as you do not it anymore. Calculate and print the frequencies for the new columns (date and month)
+
+```{r}
+
+df2 = df2 %>% mutate(
+  date_format = mdy_hm(tst_dt),
+  month = month(date_format),
+  date = day(date_format)
+  ) %>% 
+  select(-c(tst_dt, date_format))
+
+```
+
+### Task 2.3 
+
+Using the ff_glimpse() function from the finalfit package, provide a snapshot of missingness in this dataset. This function also returns the number of levels for categorical variables. If there is any variable with large amount of missingness (e.g. more than 75%), remove this variable from the dataset.
+
+```{r}
+
+missing_info = finalfit::ff_glimpse(df2)
+
+missing_info$Categorical[,c('n','missing_percent')]
+
+missing_info$Categorical[,c('n','missing_percent')] %>% filter(missing_percent >= 0.75)
+
+missing_info$Continuous[,c('n','missing_percent')]
+
+df2 = df2 %>% select(-ayp_lep)
+
+```
+
+### Task 2.4 
+
+Most of the variables in this dataset are categorical, and particularly a binary variable with a Yes and No response. Check the frequency of unique values for all categorical variables. If there is any inconsistency (e.g., Yes is coded as both ‘y’ and ‘Y’) for any of these variables in terms of how values are coded, fix them. Also, check the distribution of numeric variables and make sure there is no anomaly.
+
+```{r}
+
+df2[sapply(df2, is.character)] <- lapply(df2[sapply(df2, is.character)], as.factor)
+
+str(df2)
+
+df2 = df2 %>% mutate(trgt_assist_fg = as.character(trgt_assist_fg),
+                     trgt_assist_fg = ifelse(trgt_assist_fg == 'y', 'Y', trgt_assist_fg))
+
+str(df2)
+
+missing_info$Continuous$label
+
+psych::describe(df2$enrl_grd)
+ggplot(df2, aes(x = enrl_grd)) + geom_histogram()
+psych::describe(df2$score)
+ggplot(df2, aes(x = score)) + geom_histogram()
+```
+
+### Task 2.5 
+
+Prepare a recipe using the recipe() and prep() functions from the recipes package for final transformation of the variables in this dataset.
+
+```{r}
+
+outcome = c('score')
+  
+id = c('id')
+
+numeric = c('enrl_grd')
+
+cylic <- c('date', 'month')
+
+categorical <- c('sex','ethnic_cd','tst_bnch','migrant_ed_fg','ind_ed_fg','sp_ed_fg','tag_ed_fg','econ_dsvntg','stay_in_dist','stay_in_schl','dist_sped','trgt_assist_fg','ayp_dist_partic','ayp_schl_partic','ayp_dist_prfrm','ayp_schl_prfrm','rc_dist_partic','rc_schl_partic','rc_dist_prfrm','rc_schl_prfrm','grp_rpt_dist_partic','grp_rpt_schl_partic','grp_rpt_dist_prfrm','grp_rpt_schl_prfrm') 
+
+for(i in categorical){
+    df2[,i] <- as.factor(df2[,i])
+}
+
+```
+
+
+```{r}
+
+blueprint <- recipe(x  = df2,
+                    vars  = c(categorical,numeric,cylic,outcome,id),
+                    roles = c(rep('predictor',ncol(df2)-2),'outcome','ID')) %>% 
+  # for all predictors, create an indicator variable for missingness
+  step_indicate_na(all_of(categorical),all_of(numeric)) %>%
+  
+  # Remove the variable with zero variance, this will also remove the missingness 
+  # variables if there is no missingess
+
+  step_zv(all_numeric()) %>%
+  
+  # Impute the missing values using mean and mode. You can instead use a 
+  # more advanced imputation model such as bagged trees. I haven't used it due
+  # to time concerns
+  
+  step_impute_mean(all_of(numeric)) %>%
+  step_impute_mode(all_of(categorical)) %>%
+  
+  # cylic date
+  step_harmonic(date, frequency = 1, cycle_size = 30) %>%
+  step_harmonic(month, frequency = 1, cycle_size = 12) %>% 
+  
+  # Natural splines for numeric variables and proportions
+  
+  step_ns(all_of(numeric),deg_free=3) %>%
+  
+  # Standardize the natural splines of numeric variables and proportions
+  
+  step_normalize(paste0(numeric,'_ns_1'),
+                 paste0(numeric,'_ns_2'),
+                 paste0(numeric,'_ns_3')) %>%
+  
+  # One-hot encoding for all categorical variables
+  
+  step_dummy(all_of(categorical),one_hot=TRUE)
+
+
+blueprint
+
+prepare <- prep(blueprint, 
+                training = df2)
+```
+
+### Task 2.6 
+
+Finally, apply this recipe to the whole dataset and obtain the final version of the dataset with transformed variables. The final dataset should have 189,426 rows and 76 columns as the following:
+
+```{r}
+baked_df2 <- bake(prepare, new_data = df2)
+
+dim(baked_df2)
+
+head(baked_df2)
+```
+
+Task 2.7 
+
+Remove the original date and month variables from the dataset as we do not need them anymore because we already created sin and cos terms for each one of them.
+
+```{r}
+baked_df2 = baked_df2 %>% select(-c('date','month'))
+```
+
+Task 2.8 
+
+Export the final dataset (189,426 x 74) as a .csv file and upload it to Canvas along your submission.
+
+```{r}
+
+write.csv(x=baked_df2, file="data/hw1_data2_output.csv")
+
+```
+
