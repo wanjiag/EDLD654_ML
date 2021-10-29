@@ -10,7 +10,7 @@ editor_options:
 
 Import the tweet data from this link.
 
-```{r setup, include=FALSE}
+```{r}
 df <- read.csv("https://raw.githubusercontent.com/uo-datasci-specialization/c4-ml-fall-2021/main/data/tweet_sub.csv")
 
 library(tidyverse)
@@ -83,7 +83,7 @@ t = map(df$tweet, textEmbed,
                   layers = 12,
                   context_aggregation_layers = 'concatenate')
 
-save.image(file='data/roberta-base_output.RData')
+save.image(file='data/roberta-base_output.rdata')
 ```
 
 ```{r}
@@ -202,6 +202,12 @@ df2 = df2 %>% mutate(
 
 ```
 
+
+```{r}
+df2 %>% count(date)
+df2 %>% count(month)
+```
+
 ### Task 2.3 
 
 Using the ff_glimpse() function from the finalfit package, provide a snapshot of missingness in this dataset. This function also returns the number of levels for categorical variables. If there is any variable with large amount of missingness (e.g. more than 75%), remove this variable from the dataset.
@@ -219,6 +225,7 @@ missing_info$Continuous[,c('n','missing_percent')]
 df2 = df2 %>% select(-ayp_lep)
 
 ```
+
 
 ### Task 2.4 
 
@@ -323,7 +330,7 @@ dim(baked_df2)
 head(baked_df2)
 ```
 
-Task 2.7 
+### Task 2.7 
 
 Remove the original date and month variables from the dataset as we do not need them anymore because we already created sin and cos terms for each one of them.
 
@@ -331,7 +338,7 @@ Remove the original date and month variables from the dataset as we do not need 
 baked_df2 = baked_df2 %>% select(-c('date','month'))
 ```
 
-Task 2.8 
+### Task 2.8 
 
 Export the final dataset (189,426 x 74) as a .csv file and upload it to Canvas along your submission.
 
