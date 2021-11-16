@@ -1,0 +1,597 @@
+---
+title: "hw2"
+author: "Wanjia Guo"
+date: "11/11/2021"
+output:
+  html_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Part 1: Predicting a Categorical Outcome using Regularized Logistic Regression
+
+```{r}
+# Load the following packages needed for modeling in this assignment
+  
+require(caret)
+require(recipes)
+require(finalfit)
+require(glmnet)
+require(cutpointr)
+
+set.seed(315)
+
+# Import the tweet dataset with embeddings
+
+tweet <- read.csv('https://raw.githubusercontent.com/uo-datasci-specialization/c4-ml-fall-2021/main/content/post/hw2/data/hw1_tweet_final.csv',header=TRUE)
+
+# Recipe for the tweet dataset
+
+blueprint_tweet <- recipe(x  = tweet,
+                          vars  = colnames(tweet),
+                          roles = c('outcome',rep('predictor',772))) %>%
+  step_dummy('month',one_hot=TRUE) %>% 
+  step_harmonic('day',frequency=1,cycle_size=7, role='predictor') %>%
+  step_harmonic('date',frequency=1,cycle_size=31,role='predictor') %>%
+  step_harmonic('hour',frequency=1,cycle_size=24,role='predictor') %>%
+  step_normalize(paste0('Dim',1:768)) %>%
+  step_normalize(c('day_sin_1','day_cos_1',
+                   'date_sin_1','date_cos_1',
+                   'hour_sin_1','hour_cos_1')) %>%
+  step_num2factor(sentiment,
+                  transform = function(x) x + 1,
+                  levels=c('Negative','Positive'))
+
+  
+    # Notice that I explicitly specified role=predictor when using
+    # step_harmonic function. This assures that the newly derived sin and cos
+    # variables has a defined role.
+    # You need to do this otherwise caret::train function breaks.
+    # caret_train requires every variable in the recipe to have a role
+    
+    # You can run the following code and make sure every variable has a defined 
+    # role. If you want to experiment, remove the role=predictor argument
+    # in the step_harmonic function, create the recipe again, and run the following
+    # you will see that the new sin and cos variables have NA in the column role
+    # and this breaks the caret::train function later.
+  
+    # Also, in the last line, we transform the outcome variable 'sentiment' to 
+    # a factor with labels. 
+    # This seems necessary for fitting logistic regression via caret::train
+
+    #View(blueprint_tweet %>% prep() %>% summary)
+```
+
+### Task 1.1. Split the original data into two subsets: training and test. Let the training data have the 80% of cases and the test data have the 20% of the cases.
+
+```{r}
+
+loc      <- sample(1:nrow(tweet), round(nrow(tweet) * 0.8))
+df_tr  <- tweet[loc, ]
+df_te  <- tweet[-loc, ]
+
+```
+
+### Task 1.2. Use the caret::train() function to train a model with 10-fold cross-validation for predicting the probability of sentiment being positive using logistic regression without any regularization. Evaluate and report the performance of the model on the test dataset.
+
+```{r}
+
+# Randomly shuffle the data
+
+df_tr = df_tr[sample(nrow(df_tr)),]
+
+# Create 10 folds with equal size
+
+folds = cut(seq(1,nrow(df_tr)),breaks=10,labels=FALSE)
+
+# Create the list for each fold 
+
+my.indices <- vector('list',10)
+for(i in 1:10){
+  my.indices[[i]] <- which(folds!=i)
+}
+
+cv <- trainControl(method = "cv",
+             index  = my.indices,
+             classProbs = TRUE,
+             summaryFunction = mnLogLoss)
+
+vanilla <- train(blueprint_tweet, 
+                  data      = df_tr, 
+                  method    = "glm",
+                  family    = 'binomial',
+                  metric    = 'logLoss',
+                  trControl = cv)
+```
+
+
+```{r}
+predicted_te <- predict(vanilla, df_te, type='prob')
+
+dim(predicted_te)
+
+head(predicted_te)
+
+cut.obj <- cutpointr(x     = predicted_te$Positive,
+                     class = df_te$sentiment)
+
+vanilla_auc = auc(cut.obj)
+
+vanilla_auc
+
+# Confusion matrix
+
+pred_class <- ifelse(predicted_te$Positive>.5,1,0)
+
+vanilla_confusion <- table(df_te$sentiment,pred_class)
+
+vanilla_confusion
+
+vanilla_ACC = (vanilla_confusion[2,2]+vanilla_confusion[1,1])/sum(vanilla_confusion)
+
+vanilla_ACC
+
+vanilla_TPR = vanilla_confusion[2,2]/(vanilla_confusion[2,1]+vanilla_confusion[2,2])
+
+vanilla_TPR
+
+vanilla_TNR = vanilla_confusion[1,1]/(vanilla_confusion[1,1]+vanilla_confusion[1,2])
+
+vanilla_TNR
+
+vanilla_PRE = vanilla_confusion[2,2]/(vanilla_confusion[1,2]+vanilla_confusion[2,2])
+
+vanilla_PRE
+```
+
+### Task 1.3. Use the caret::train() function to train a model with 10-fold cross-validation for predicting the probability of sentiment being positive using logistic regression with ridge penalty. Try different values of ridge penalty to decide the optimal value. Use logLoss as a metric for optimization. Plot the results, and report the optimal value of ridge penalty.
+
+```{r}
+# Hyperparameter tuning grid for ridge penalty (lambda), alpha = 0
+
+grid <- data.frame(alpha = 0, lambda = c(0,.001,.005,.01,.05,.1,.2,.3,.4,.5)) 
+
+ridge <- train(blueprint_tweet, 
+                  data      = df_tr, 
+                  method    = "glmnet",
+                  family    = 'binomial',
+                  metric    = 'logLoss',
+                  trControl = cv,
+                  tuneGrid = grid)
+
+plot(ridge)
+
+ridge$bestTune
+
+grid <- data.frame(alpha = 0, lambda = seq(.15,.25,.001)) 
+ridge <- train(blueprint_tweet, 
+                  data      = df_tr, 
+                  method    = "glmnet",
+                  family    = 'binomial',
+                  metric    = 'logLoss',
+                  trControl = cv,
+                  tuneGrid = grid)
+
+plot(ridge)
+
+ridge$bestTune
+
+grid <- data.frame(alpha = 0, lambda = seq(.155,.175,.0001)) 
+ridge <- train(blueprint_tweet, 
+                  data      = df_tr, 
+                  method    = "glmnet",
+                  family    = 'binomial',
+                  metric    = 'logLoss',
+                  trControl = cv,
+                  tuneGrid = grid)
+
+plot(ridge)
+
+ridge$bestTune
+
+predicted_te <- predict(ridge, df_te, type='prob')
+
+cut.obj <- cutpointr(x     = predicted_te$Positive,
+                     class = df_te$sentiment)
+
+ridge_auc = auc(cut.obj)
+
+ridge_auc
+
+# Confusion matrix
+
+pred_class <- ifelse(predicted_te$Positive>.5,1,0)
+
+ridge_confusion <- table(df_te$sentiment,pred_class)
+
+ridge_confusion
+
+ridge_ACC = (ridge_confusion[2,2]+ridge_confusion[1,1])/sum(ridge_confusion)
+
+ridge_ACC
+
+ridge_TPR = ridge_confusion[2,2]/(ridge_confusion[2,1]+ridge_confusion[2,2])
+
+ridge_TPR
+
+ridge_TNR = ridge_confusion[1,1]/(ridge_confusion[1,1]+ridge_confusion[1,2])
+
+ridge_TNR
+
+ridge_PRE = ridge_confusion[2,2]/(ridge_confusion[1,2]+ridge_confusion[2,2])
+
+ridge_PRE
+```
+
+### Task 1.4. Use the caret::train() function to train a model with 10-fold cross-validation for predicting the probability of sentiment being positive using logistic regression with lasso penalty. Try different values of lasso penalty to decide optimal value. Use logLoss as a metric for optimization. Plot the results, and report the optimal value of lasso penalty.
+
+```{r}
+
+grid <- data.frame(alpha = 1, lambda = c(0, .001,.005,.01,.05,.1,.2,.3,.4,.5)) 
+
+lasso <- train(blueprint_tweet, 
+                  data      = df_tr, 
+                  method    = "glmnet",
+                  family    = 'binomial',
+                  metric    = 'logLoss',
+                  trControl = cv,
+                  tuneGrid = grid)
+
+plot(lasso)
+
+lasso$bestTune
+
+grid <- data.frame(alpha = 1, lambda = seq(.005,.015,.0001)) 
+
+lasso <- train(blueprint_tweet, 
+                  data      = df_tr, 
+                  method    = "glmnet",
+                  family    = 'binomial',
+                  metric    = 'logLoss',
+                  trControl = cv,
+                  tuneGrid = grid)
+
+plot(lasso)
+
+lasso$bestTune
+
+predicted_te <- predict(lasso, df_te, type='prob')
+
+cut.obj <- cutpointr(x     = predicted_te$Positive,
+                     class = df_te$sentiment)
+
+lasso_auc = auc(cut.obj)
+
+lasso_auc
+
+# Confusion matrix
+
+pred_class <- ifelse(predicted_te$Positive>.5,1,0)
+
+lasso_confusion <- table(df_te$sentiment,pred_class)
+
+lasso_confusion
+
+lasso_ACC = (lasso_confusion[2,2]+lasso_confusion[1,1])/sum(lasso_confusion)
+
+lasso_ACC
+
+lasso_TPR = lasso_confusion[2,2]/(lasso_confusion[2,1]+lasso_confusion[2,2])
+
+lasso_TPR
+
+lasso_TNR = lasso_confusion[1,1]/(lasso_confusion[1,1]+lasso_confusion[1,2])
+
+lasso_TNR
+
+lasso_PRE = lasso_confusion[2,2]/(lasso_confusion[1,2]+lasso_confusion[2,2])
+
+lasso_PRE
+```
+
+### Task 1.5 Evaluate the performance of the models in 1.2, 1.3, and 1.4 on the test dataset. Calculate and report logLoss (LL), area under the reciever operating characteristic curver (AUC), overall accuracy (ACC), true positive rate (TPR), true negative rate (TNR), and precision (PRE) for three models. When calculating ACC, TPR, TNR, and PRE, assume that we use a cut-off value of 0.5 for the predicted probabilities. Summarize these numbers in a table like the following. Decide and comment on which model you would use to predict sentiment of a tweet moving forward.
+
+```{r}
+
+name <- c('Logistic Regression', 'Logistic Regression with Ridge Penalty', 'Logistic Regression with Lasso Penalty')
+ridge$results %>% filter(lambda == ridge$bestTune$lambda) %>% .$logLoss
+LL <- c(vanilla$results$logLoss, 
+        ridge$results %>% filter(lambda == ridge$bestTune$lambda) %>% .$logLoss,
+        lasso$results %>% filter(lambda == lasso$bestTune$lambda) %>% .$logLoss)
+AUC <- c(vanilla_auc, ridge_auc, lasso_auc)
+ACC <- c(vanilla_ACC, ridge_ACC, lasso_ACC)
+TPR <- c(vanilla_TPR, ridge_TPR, lasso_TPR)
+TNR <- c(vanilla_TNR, ridge_TNR, lasso_TNR)
+PRE <- c(vanilla_PRE, ridge_PRE, lasso_PRE)
+
+summary_df <- data.frame(name, LL, AUC, ACC, TPR, TNR, PRE)
+
+summary_df
+```
+
+From the table, we can see that the model with regularization performs a lot better than models without. The performance between ridge and lasso regressions are closer to each other. In particular, Ridge only perform worse than Lasso in the AUC scores, but better in all other measurements including LL, ACC, TPR, TNR, and PRE. Therefore, I will use the Ridge regression going forward.
+
+### Task 1.6 For the model you decided in 1.5, find and report the most important 10 predictors of sentiment and their coefficients. Briefly comment which variables seem to be the most important predictors.
+
+```{r}
+coefs <- coef(ridge$finalModel,
+              ridge$bestTune$lambda)
+
+ind   <- order(abs(coefs[,1]),decreasing=T)
+
+head(as.matrix(coefs[ind,]),10)
+
+vip::vip(ridge, num_features = 10, geom = "point") + 
+  theme_bw()
+```
+
+It seems like the time of the post seem to play a big role in the setiment. In particular, the posts posted in June leads to the negative emotions. However, the posts posted in May leads to positive emotions. the date, weekday, and hours contributes as well. 
+
+### Task 1.7. Below are the two tweets I picked from my timeline. Use the model you decided in Task 1.5 to predict a probability that the sentiment being positive for these tweets. You are welcome to extract the word embeddings for these tweets by yourself (model: roberta-base, layer=12). Assume that all these tweets are posted on Saturday, May 1, 2021 at 12pm. For convenience, you can also download the dataset from the link below in case you have trouble in extracting the word embeddings.
+
+```{r}
+new_tweets <- read.csv('https://raw.githubusercontent.com/uo-datasci-specialization/c4-ml-fall-2021/main/content/post/hw2/data/toy_tweet_embeddings.csv',header=TRUE)
+
+predicted_te <- predict(ridge, new_tweets, type='prob')
+
+predicted_te
+```
+
+Both tweets are evaluated as negative, which is kinda interesting and surprising. However, since we know the timing of the tweet influence the emotion, I think it is less suprising as we are using a fixed time for these two tweets. 
+
+### Task 1.8. Let’s do an experiment and test whether or not the model is biased against certain groups when detecting sentiment of a given text. Below you will find 10 hypothetical tweets with an identical structure. The only thing that changes from tweet to tweet is the subject. You are welcome to extract the word embeddings for these tweets by yourself (model: roberta-base, layer=12). Assume that all these tweets are posted on Saturday, May 1, 2021 at 12pm. For convenience, you can also download the dataset from the link below in case you have trouble in extracting the word embeddings.
+
+What do you think? Does your model favor any group or seem to be biased against any group? Provide a brief commentary (not more than 500 words).
+
+```{r}
+bias_check <- read.csv('https://raw.githubusercontent.com/uo-datasci-specialization/c4-ml-fall-2021/main/content/post/hw2/data/bias_check_tweet_embeddings.csv',header=TRUE)
+
+predicted_te <- predict(ridge, bias_check, type='prob')
+
+predicted_te
+
+names = c('Muslims', 'Jews', 'Christians', 'Atheists', 'Buddhists', 'Turkish people', 'French people', 'American people', 'Japanese people', 'Russian people')
+
+summary_df = predicted_te %>% mutate(name = names,
+                                     `Probability(Sentiment=Positive)` = Positive) %>% 
+  select(-c(Positive, Negative))
+
+
+summary_df
+```
+
+The lower the positive sentiment probability, the more correct the model is. Therefore, the model correctly judged the sentence for Christians and Atheists. However, not for the others. In particular, it is judged rather positive for Russian and Turkish people. I still feel it has to be heavily influenced by the date and time that the post is posted. As May as a heavy positive weight on the sentiment. 
+
+# Part 2: Predicting a Continous Outcome using Regularized Linear Regression
+
+```{r}
+# Import the oregon dataset
+
+oregon <- read.csv('https://raw.githubusercontent.com/uo-datasci-specialization/c4-ml-fall-2021/main/content/post/hw2/data/hw1_oregon_final.csv',header=TRUE)
+
+# Recipe for the oregon dataset
+
+  outcome <- 'score'
+  
+  id      <- 'id'
+
+  categorical <- c('sex','ethnic_cd','tst_bnch','migrant_ed_fg','ind_ed_fg',
+                   'sp_ed_fg','tag_ed_fg','econ_dsvntg','stay_in_dist',
+                   'stay_in_schl','dist_sped','trgt_assist_fg',
+                   'ayp_dist_partic','ayp_schl_partic','ayp_dist_prfrm',
+                   'ayp_schl_prfrm','rc_dist_partic','rc_schl_partic',
+                   'rc_dist_prfrm','rc_schl_prfrm','grp_rpt_dist_partic',
+                   'grp_rpt_schl_partic','grp_rpt_dist_prfrm',
+                   'grp_rpt_schl_prfrm')
+
+  numeric <- c('enrl_grd')
+
+  cyclic <- c('date','month')
+
+
+blueprint_oregon <- recipe(x     = oregon,
+                    vars  = c(outcome,categorical,numeric,cyclic),
+                    roles = c('outcome',rep('predictor',27))) %>%
+  step_indicate_na(all_of(categorical),all_of(numeric)) %>%
+  step_zv(all_numeric()) %>%
+  step_impute_mean(all_of(numeric)) %>%
+  step_impute_mode(all_of(categorical)) %>%
+  step_harmonic('date',frequency=1,cycle_size=31,role='predictor') %>%
+  step_harmonic('month',frequency=1,cycle_size=12,role='predictor') %>%
+  step_ns('enrl_grd',deg_free=3) %>%
+  step_normalize(c(paste0(numeric,'_ns_1'),paste0(numeric,'_ns_2'),paste0(numeric,'_ns_3'))) %>%
+  step_normalize(c("date_sin_1","date_cos_1","month_sin_1","month_cos_1")) %>%
+  step_dummy(all_of(categorical),one_hot=TRUE) %>%
+  step_rm(c('date','month'))
+    
+  #View(blueprint_oregon %>% prep() %>% summary)
+```
+
+### Task 2.1. Check the dataset for missingness. If there is any variable with more than 75% missingness, remove these variables.
+
+```{r}
+missing_info = ff_glimpse(oregon)
+
+missing_info$Categorical[,c('n','missing_percent')]
+
+missing_info$Categorical[,c('n','missing_percent')] %>% filter(missing_percent >= 0.75)
+
+missing_info$Continuous[,c('n','missing_percent')]
+
+missing_info$Categorical[,c('n','missing_percent')] %>% filter(missing_percent >= 0.75)
+
+```
+
+I didnt find any variable that is missing for more than 75%.
+
+### Task 2.2. Split the original data into two subsets: training and test. Let the training data have the 80% of cases and the test data have the 20% of the cases.
+
+```{r}
+
+loc      <- sample(1:nrow(oregon), round(nrow(oregon) * 0.8))
+df2_tr  <- oregon[loc, ]
+df2_te  <- oregon[-loc, ]
+
+```
+
+### Task 2.3. Use the caret::train() function to train a model with 10-fold cross-validation to predict the scores using linear regression without any regularization. Evaluate the performance of the model on both training and test datasets. Evaluate and report RMSE, R-square, and MAE for both training and test datasets. Is there any evidence of overfitting?
+
+```{r}
+
+df2_tr = df2_tr[sample(nrow(df2_tr)),]
+
+# Create 10 folds with equal size
+
+folds = cut(seq(1,nrow(df2_tr)),breaks=10,labels=FALSE)
+
+# Create the list for each fold 
+
+my.indices <- vector('list',10)
+
+for(i in 1:10){
+  my.indices[[i]] <- which(folds!=i)
+}
+      
+cv <- trainControl(method = "cv",
+                   index  = my.indices)
+
+vanilla <- train(blueprint_oregon, 
+                 data      = df2_tr, 
+                 method    = "lm", 
+                 trControl = cv)
+
+vanilla
+
+predicted_te <- predict(vanilla, df2_te)
+
+rmse_te <- sqrt(mean((df2_te$score - predicted_te)^2))
+rmse_te
+
+rsq_te <- cor(df2_te$score,predicted_te)^2
+rsq_te
+
+mae_te <- mean(abs(df2_te$score - predicted_te))
+mae_te
+```
+
+The performance between the training dateset and testing dataset are highly similar to each other, so there doesnt seem to have a problem of overfitting. 
+
+### Task 2.4. Use the caret::train() function to train a model with 10-fold cross-validation to predict the scores using ridge regression. Try different values of lambda to decide optimal value. Evaluate the performance of the model on the test dataset, and report RMSE, R-square, and MAE. Does ridge regression provide any improvement over linear regression with no regularization?
+
+```{r}
+
+grid <- data.frame(alpha = 0, lambda = c(0, .001,.005,.01,.05,.1,.2,.3,.4,.5))
+                     #seq(0.01,3,.01)) 
+grid
+
+# Train the model
+
+ridge <- train(blueprint_oregon, 
+                      data      = df2_tr, 
+                      method    = "glmnet", 
+                      trControl = cv,
+                      tuneGrid  = grid)
+
+ridge$results
+
+ridge$bestTune
+
+plot(ridge)
+
+predicted_te <- predict(ridge, df2_te)
+
+rmse_ridge <- sqrt(mean((df2_te$score - predicted_te)^2))
+rmse_ridge
+
+rsq_ridge <- cor(df2_te$score,predicted_te)^2
+rsq_ridge
+
+mae_ridge <- mean(abs(df2_te$score - predicted_te))
+mae_ridge
+
+```
+
+There is a very very small improvement comparing with the linear regression without any regularization. However, the value of lambda doesnt seem to actually influence the model performance, which is quite weird. 
+
+### Task 2.5. Use the caret::train() function to train a model with 10-fold cross-validation to predict the scores using lasso regression. Try different values of lambda to decide optimal value. Evaluate the performance of the model on the test dataset, and report RMSE, R-square, and MAE. Does lasso regression provide any improvement over linear regression with no regularization?
+
+```{r}
+
+grid <- data.frame(alpha = 1, lambda = c(0, .001,.005,.01,.05,.1,.2,.3,.4,.5))
+                     #seq(0.01,3,.01)) 
+grid
+
+# Train the model
+
+lasso <- train(blueprint_oregon, 
+                      data      = df2_tr, 
+                      method    = "glmnet", 
+                      trControl = cv,
+                      tuneGrid  = grid)
+lasso$results
+lasso$bestTune
+plot(lasso)
+
+grid <- data.frame(alpha = 1, lambda = seq(0.0,0.05,.001))
+grid
+
+# Train the model
+
+lasso <- train(blueprint_oregon, 
+                      data      = df2_tr, 
+                      method    = "glmnet", 
+                      trControl = cv,
+                      tuneGrid  = grid)
+lasso$results
+lasso$bestTune
+plot(lasso)
+
+
+predicted_te <- predict(lasso, df2_te)
+
+rmse_lasso <- sqrt(mean((df2_te$score - predicted_te)^2))
+rmse_lasso
+
+rsq_lasso <- cor(df2_te$score,predicted_te)^2
+rsq_lasso
+
+mae_lasso <- mean(abs(df2_te$score - predicted_te))
+mae_lasso
+```
+
+There is a very very small improvement. However, similar to the ridge penalty, the value of lambda doesnt seem to actually influence the model performance as long as it's less than 0.05, which is still quite weird. 
+
+### Task 2.6 Evaluate the performance of the models in 2.2, 2.3, and 2.4 on the test dataset. Calculate and report the root mean squared error (RMSE), mean absolute error (MAE), and R-square. Summarize these numbers in a table like the following. Decide and comment on which model you would use to predict scores.
+
+```{r}
+
+name <- c('Linear Regression', 'Linear Regression with Ridge Penalty', 'Linear Regression with Lasso Penalty')
+RMSE <- c(rmse_te, rmse_ridge, rmse_lasso)
+MAE <- c(mae_te, mae_ridge, mae_lasso)
+R_sq <- c(rsq_te, rsq_ridge, rsq_lasso)
+
+summary_df <- data.frame(name, RMSE, MAE, R_sq)
+
+summary_df
+```
+
+In general, the regression with penalties perform better than the linear regression without. The regression without penalty has higher error and lower r-square. Between ridge and lasso penalty, the performance are really close to each other. Ridge is slightly worse for RMSE and MAE, but lasso is worse for r-squre. I will use lasso regression since it wins in two measures. 
+
+### Task 2.7 For the model you decided in 2.6, find and report the most important 10 predictors of test scores and their regression coefficients. Briefly comment which variables seem to be the most important predictors.
+
+```{r}
+coefs <- coef(lasso$finalModel,
+              lasso$bestTune$lambda)
+
+ind   <- order(abs(coefs[,1]),decreasing=T)
+
+head(as.matrix(coefs[ind,]),10)
+
+vip::vip(ridge, num_features = 10, geom = "point") + 
+  theme_bw()
+```
+
+The most important predictor for score whether the student attends a Talented and Gifted program, which makes sense as the students attends a gifted program is more likely to perform better in the exam. It also shows that students who are native Americans and students who attends Individualized Education Plan (IEP/IFSP) also shows weaker exam scores, as the na of these columns leads to better performance. 
