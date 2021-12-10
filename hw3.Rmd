@@ -292,7 +292,8 @@ for(i in 1:10){
   my.indices[[i]] <- which(folds!=i)
 }
 
-cv <- trainControl(method = "none")
+cv <- trainControl(method = "cv",
+                   index  = my.indices)
 
 # Grid settings
 

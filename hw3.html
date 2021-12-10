@@ -486,7 +486,8 @@ for(i in 1:10){
   my.indices[[i]] &lt;- which(folds!=i)
 }
 
-cv &lt;- trainControl(method = &quot;none&quot;)
+cv &lt;- trainControl(method = &quot;cv&quot;,
+                   index  = my.indices)
 
 # Grid settings
 
@@ -502,13 +503,80 @@ bags &lt;- caret::train(blueprint_oregon,
                      tuneGrid = grid,
                      num.trees = 500,
                      max.depth = 60)</code></pre>
-<pre><code>## Growing trees.. Progress: 13%. Estimated remaining time: 3 minutes, 27 seconds.
-## Growing trees.. Progress: 27%. Estimated remaining time: 2 minutes, 46 seconds.
-## Growing trees.. Progress: 42%. Estimated remaining time: 2 minutes, 13 seconds.
-## Growing trees.. Progress: 56%. Estimated remaining time: 1 minute, 39 seconds.
-## Growing trees.. Progress: 71%. Estimated remaining time: 1 minute, 6 seconds.
-## Growing trees.. Progress: 83%. Estimated remaining time: 38 seconds.
-## Growing trees.. Progress: 98%. Estimated remaining time: 5 seconds.</code></pre>
+<pre><code>## Growing trees.. Progress: 14%. Estimated remaining time: 3 minutes, 4 seconds.
+## Growing trees.. Progress: 30%. Estimated remaining time: 2 minutes, 25 seconds.
+## Growing trees.. Progress: 46%. Estimated remaining time: 1 minute, 50 seconds.
+## Growing trees.. Progress: 62%. Estimated remaining time: 1 minute, 17 seconds.
+## Growing trees.. Progress: 78%. Estimated remaining time: 45 seconds.
+## Growing trees.. Progress: 92%. Estimated remaining time: 15 seconds.
+## Growing trees.. Progress: 15%. Estimated remaining time: 3 minutes, 7 seconds.
+## Growing trees.. Progress: 30%. Estimated remaining time: 2 minutes, 25 seconds.
+## Growing trees.. Progress: 45%. Estimated remaining time: 1 minute, 53 seconds.
+## Growing trees.. Progress: 61%. Estimated remaining time: 1 minute, 19 seconds.
+## Growing trees.. Progress: 76%. Estimated remaining time: 48 seconds.
+## Growing trees.. Progress: 92%. Estimated remaining time: 16 seconds.
+## Growing trees.. Progress: 15%. Estimated remaining time: 3 minutes, 1 seconds.
+## Growing trees.. Progress: 30%. Estimated remaining time: 2 minutes, 24 seconds.
+## Growing trees.. Progress: 45%. Estimated remaining time: 1 minute, 53 seconds.
+## Growing trees.. Progress: 60%. Estimated remaining time: 1 minute, 22 seconds.
+## Growing trees.. Progress: 76%. Estimated remaining time: 50 seconds.
+## Growing trees.. Progress: 91%. Estimated remaining time: 19 seconds.
+## Growing trees.. Progress: 15%. Estimated remaining time: 3 minutes, 7 seconds.
+## Growing trees.. Progress: 31%. Estimated remaining time: 2 minutes, 25 seconds.
+## Growing trees.. Progress: 46%. Estimated remaining time: 1 minute, 50 seconds.
+## Growing trees.. Progress: 61%. Estimated remaining time: 1 minute, 21 seconds.
+## Growing trees.. Progress: 74%. Estimated remaining time: 54 seconds.
+## Growing trees.. Progress: 90%. Estimated remaining time: 21 seconds.
+## Growing trees.. Progress: 13%. Estimated remaining time: 3 minutes, 27 seconds.
+## Growing trees.. Progress: 29%. Estimated remaining time: 2 minutes, 34 seconds.
+## Growing trees.. Progress: 45%. Estimated remaining time: 1 minute, 56 seconds.
+## Growing trees.. Progress: 61%. Estimated remaining time: 1 minute, 21 seconds.
+## Growing trees.. Progress: 77%. Estimated remaining time: 48 seconds.
+## Growing trees.. Progress: 92%. Estimated remaining time: 16 seconds.
+## Growing trees.. Progress: 13%. Estimated remaining time: 3 minutes, 23 seconds.
+## Growing trees.. Progress: 29%. Estimated remaining time: 2 minutes, 34 seconds.
+## Growing trees.. Progress: 42%. Estimated remaining time: 2 minutes, 10 seconds.
+## Growing trees.. Progress: 56%. Estimated remaining time: 1 minute, 38 seconds.
+## Growing trees.. Progress: 71%. Estimated remaining time: 1 minute, 5 seconds.
+## Growing trees.. Progress: 84%. Estimated remaining time: 34 seconds.
+## Growing trees.. Progress: 97%. Estimated remaining time: 6 seconds.
+## Growing trees.. Progress: 15%. Estimated remaining time: 3 minutes, 13 seconds.
+## Growing trees.. Progress: 28%. Estimated remaining time: 2 minutes, 42 seconds.
+## Growing trees.. Progress: 41%. Estimated remaining time: 2 minutes, 16 seconds.
+## Growing trees.. Progress: 55%. Estimated remaining time: 1 minute, 44 seconds.
+## Growing trees.. Progress: 70%. Estimated remaining time: 1 minute, 8 seconds.
+## Growing trees.. Progress: 85%. Estimated remaining time: 32 seconds.
+## Growing trees.. Progress: 12%. Estimated remaining time: 3 minutes, 51 seconds.
+## Growing trees.. Progress: 26%. Estimated remaining time: 3 minutes, 4 seconds.
+## Growing trees.. Progress: 39%. Estimated remaining time: 2 minutes, 29 seconds.
+## Growing trees.. Progress: 51%. Estimated remaining time: 2 minutes, 1 seconds.
+## Growing trees.. Progress: 62%. Estimated remaining time: 1 minute, 38 seconds.
+## Growing trees.. Progress: 74%. Estimated remaining time: 1 minute, 5 seconds.
+## Growing trees.. Progress: 89%. Estimated remaining time: 28 seconds.
+## Growing trees.. Progress: 12%. Estimated remaining time: 3 minutes, 39 seconds.
+## Growing trees.. Progress: 26%. Estimated remaining time: 3 minutes, 1 seconds.
+## Growing trees.. Progress: 37%. Estimated remaining time: 2 minutes, 40 seconds.
+## Growing trees.. Progress: 50%. Estimated remaining time: 2 minutes, 9 seconds.
+## Growing trees.. Progress: 62%. Estimated remaining time: 1 minute, 35 seconds.
+## Growing trees.. Progress: 74%. Estimated remaining time: 1 minute, 7 seconds.
+## Growing trees.. Progress: 86%. Estimated remaining time: 35 seconds.
+## Growing trees.. Progress: 98%. Estimated remaining time: 6 seconds.
+## Growing trees.. Progress: 11%. Estimated remaining time: 4 minutes, 10 seconds.
+## Growing trees.. Progress: 21%. Estimated remaining time: 3 minutes, 53 seconds.
+## Growing trees.. Progress: 34%. Estimated remaining time: 3 minutes, 6 seconds.
+## Growing trees.. Progress: 46%. Estimated remaining time: 2 minutes, 27 seconds.
+## Growing trees.. Progress: 59%. Estimated remaining time: 1 minute, 50 seconds.
+## Growing trees.. Progress: 72%. Estimated remaining time: 1 minute, 14 seconds.
+## Growing trees.. Progress: 83%. Estimated remaining time: 44 seconds.
+## Growing trees.. Progress: 95%. Estimated remaining time: 12 seconds.
+## Growing trees.. Progress: 10%. Estimated remaining time: 5 minutes, 3 seconds.
+## Growing trees.. Progress: 21%. Estimated remaining time: 4 minutes, 7 seconds.
+## Growing trees.. Progress: 31%. Estimated remaining time: 3 minutes, 42 seconds.
+## Growing trees.. Progress: 40%. Estimated remaining time: 3 minutes, 10 seconds.
+## Growing trees.. Progress: 52%. Estimated remaining time: 2 minutes, 27 seconds.
+## Growing trees.. Progress: 66%. Estimated remaining time: 1 minute, 40 seconds.
+## Growing trees.. Progress: 79%. Estimated remaining time: 59 seconds.
+## Growing trees.. Progress: 93%. Estimated remaining time: 19 seconds.</code></pre>
 </div>
 <div id="task-2.3.-use-the-carettrain-function-and-ranger-engine-to-train-a-model-with-10-fold-cross-validation-for-predicting-the-scores-using-a-random-forest-model-with-500-trees.-set-the-number-of-predictors-to-consider-to-25-for-each-tree-while-growing-a-random-forest." class="section level3">
 <h3>Task 2.3. Use the caret::train() function and ranger engine to train a model with 10-fold cross-validation for predicting the scores using a Random Forest model with 500 trees. Set the number of predictors to consider to 25 for each tree while growing a random forest.</h3>
@@ -525,11 +593,71 @@ random &lt;- caret::train(blueprint_oregon,
                      num.trees = 500,
                      max.depth = 60)</code></pre>
 <pre><code>## Growing trees.. Progress: 16%. Estimated remaining time: 2 minutes, 45 seconds.
-## Growing trees.. Progress: 34%. Estimated remaining time: 2 minutes, 4 seconds.
-## Growing trees.. Progress: 50%. Estimated remaining time: 1 minute, 34 seconds.
-## Growing trees.. Progress: 66%. Estimated remaining time: 1 minute, 3 seconds.
-## Growing trees.. Progress: 84%. Estimated remaining time: 30 seconds.
-## Growing trees.. Progress: 100%. Estimated remaining time: 0 seconds.</code></pre>
+## Growing trees.. Progress: 30%. Estimated remaining time: 2 minutes, 23 seconds.
+## Growing trees.. Progress: 46%. Estimated remaining time: 1 minute, 48 seconds.
+## Growing trees.. Progress: 63%. Estimated remaining time: 1 minute, 11 seconds.
+## Growing trees.. Progress: 81%. Estimated remaining time: 36 seconds.
+## Growing trees.. Progress: 97%. Estimated remaining time: 6 seconds.
+## Growing trees.. Progress: 16%. Estimated remaining time: 2 minutes, 40 seconds.
+## Growing trees.. Progress: 34%. Estimated remaining time: 2 minutes, 1 seconds.
+## Growing trees.. Progress: 49%. Estimated remaining time: 1 minute, 37 seconds.
+## Growing trees.. Progress: 64%. Estimated remaining time: 1 minute, 9 seconds.
+## Growing trees.. Progress: 79%. Estimated remaining time: 40 seconds.
+## Growing trees.. Progress: 94%. Estimated remaining time: 11 seconds.
+## Growing trees.. Progress: 15%. Estimated remaining time: 2 minutes, 58 seconds.
+## Growing trees.. Progress: 31%. Estimated remaining time: 2 minutes, 19 seconds.
+## Growing trees.. Progress: 45%. Estimated remaining time: 1 minute, 53 seconds.
+## Growing trees.. Progress: 59%. Estimated remaining time: 1 minute, 29 seconds.
+## Growing trees.. Progress: 72%. Estimated remaining time: 1 minute, 0 seconds.
+## Growing trees.. Progress: 88%. Estimated remaining time: 25 seconds.
+## Growing trees.. Progress: 13%. Estimated remaining time: 3 minutes, 31 seconds.
+## Growing trees.. Progress: 26%. Estimated remaining time: 3 minutes, 1 seconds.
+## Growing trees.. Progress: 40%. Estimated remaining time: 2 minutes, 22 seconds.
+## Growing trees.. Progress: 55%. Estimated remaining time: 1 minute, 44 seconds.
+## Growing trees.. Progress: 68%. Estimated remaining time: 1 minute, 15 seconds.
+## Growing trees.. Progress: 82%. Estimated remaining time: 42 seconds.
+## Growing trees.. Progress: 95%. Estimated remaining time: 11 seconds.
+## Growing trees.. Progress: 13%. Estimated remaining time: 3 minutes, 27 seconds.
+## Growing trees.. Progress: 26%. Estimated remaining time: 3 minutes, 1 seconds.
+## Growing trees.. Progress: 40%. Estimated remaining time: 2 minutes, 22 seconds.
+## Growing trees.. Progress: 55%. Estimated remaining time: 1 minute, 44 seconds.
+## Growing trees.. Progress: 70%. Estimated remaining time: 1 minute, 8 seconds.
+## Growing trees.. Progress: 83%. Estimated remaining time: 38 seconds.
+## Growing trees.. Progress: 96%. Estimated remaining time: 8 seconds.
+## Growing trees.. Progress: 13%. Estimated remaining time: 3 minutes, 31 seconds.
+## Growing trees.. Progress: 26%. Estimated remaining time: 3 minutes, 3 seconds.
+## Growing trees.. Progress: 40%. Estimated remaining time: 2 minutes, 22 seconds.
+## Growing trees.. Progress: 54%. Estimated remaining time: 1 minute, 44 seconds.
+## Growing trees.. Progress: 72%. Estimated remaining time: 1 minute, 0 seconds.
+## Growing trees.. Progress: 90%. Estimated remaining time: 21 seconds.
+## Growing trees.. Progress: 16%. Estimated remaining time: 2 minutes, 40 seconds.
+## Growing trees.. Progress: 34%. Estimated remaining time: 2 minutes, 2 seconds.
+## Growing trees.. Progress: 52%. Estimated remaining time: 1 minute, 27 seconds.
+## Growing trees.. Progress: 70%. Estimated remaining time: 54 seconds.
+## Growing trees.. Progress: 88%. Estimated remaining time: 21 seconds.
+## Growing trees.. Progress: 18%. Estimated remaining time: 2 minutes, 27 seconds.
+## Growing trees.. Progress: 37%. Estimated remaining time: 1 minute, 49 seconds.
+## Growing trees.. Progress: 55%. Estimated remaining time: 1 minute, 17 seconds.
+## Growing trees.. Progress: 73%. Estimated remaining time: 46 seconds.
+## Growing trees.. Progress: 91%. Estimated remaining time: 14 seconds.
+## Growing trees.. Progress: 18%. Estimated remaining time: 2 minutes, 27 seconds.
+## Growing trees.. Progress: 37%. Estimated remaining time: 1 minute, 48 seconds.
+## Growing trees.. Progress: 55%. Estimated remaining time: 1 minute, 17 seconds.
+## Growing trees.. Progress: 73%. Estimated remaining time: 46 seconds.
+## Growing trees.. Progress: 92%. Estimated remaining time: 14 seconds.
+## Growing trees.. Progress: 18%. Estimated remaining time: 2 minutes, 27 seconds.
+## Growing trees.. Progress: 36%. Estimated remaining time: 1 minute, 52 seconds.
+## Growing trees.. Progress: 55%. Estimated remaining time: 1 minute, 18 seconds.
+## Growing trees.. Progress: 72%. Estimated remaining time: 47 seconds.
+## Growing trees.. Progress: 89%. Estimated remaining time: 20 seconds.
+## Growing trees.. Progress: 12%. Estimated remaining time: 3 minutes, 47 seconds.
+## Growing trees.. Progress: 26%. Estimated remaining time: 3 minutes, 0 seconds.
+## Growing trees.. Progress: 37%. Estimated remaining time: 2 minutes, 36 seconds.
+## Growing trees.. Progress: 50%. Estimated remaining time: 2 minutes, 2 seconds.
+## Growing trees.. Progress: 64%. Estimated remaining time: 1 minute, 27 seconds.
+## Growing trees.. Progress: 76%. Estimated remaining time: 1 minute, 0 seconds.
+## Growing trees.. Progress: 88%. Estimated remaining time: 31 seconds.
+## Growing trees.. Progress: 99%. Estimated remaining time: 2 seconds.</code></pre>
 </div>
 <div id="task-2.4-evaluate-the-performance-of-the-bagged-tree-models-2.2-and-random-forest-model-2.3-on-the-test-dataset.-calculate-and-report-the-root-mean-squared-error-rmse-mean-absolute-error-mae-and-r-square.-summarize-these-numbers-in-a-table-like-the-following." class="section level3">
 <h3>Task 2.4 Evaluate the performance of the Bagged Tree models (2.2) and Random Forest Model (2.3) on the test dataset. Calculate and report the root mean squared error (RMSE), mean absolute error (MAE), and R-square. Summarize these numbers in a table like the following.</h3>
@@ -558,8 +686,8 @@ summary_df &lt;- data.frame(name, RMSE, MAE, R_sq)
 
 summary_df</code></pre>
 <pre><code>##            name     RMSE      MAE      R_sq
-## 1  Bagged trees 90.69800 70.24684 0.3895467
-## 2 Random forest 90.40476 70.01967 0.3930716</code></pre>
+## 1  Bagged trees 90.70664 70.24433 0.3894294
+## 2 Random forest 90.40432 70.02074 0.3930690</code></pre>
 </div>
 <div id="task-1.5-compare-the-performance-of-the-bagged-trees-model-and-random-forest-model-in-this-assignment-to-the-performance-of-linear-regression-models-from-the-previous-assignment.-comment-on-what-you-observe.-did-bagged-trees-or-random-forest-models-perform-better-than-linear-regression-models-in-predicting-the-test-scores" class="section level3">
 <h3>Task 1.5 Compare the performance of the Bagged Trees Model and Random Forest Model in this assignment to the performance of linear regression models from the previous assignment. Comment on what you observe. Did Bagged Trees or Random Forest Models perform better than Linear Regression Models in predicting the test scores?</h3>

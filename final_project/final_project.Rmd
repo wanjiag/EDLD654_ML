@@ -7,12 +7,16 @@ output: html_document
 
 # Research problem
 
-This kaggle dataset (https://www.kaggle.com/cosmos98/twitter-and-reddit-sentimental-analysis-dataset) contains clean text and sentiment of posts from Reddit and Twitter. Twitter also has way more data points than Reddit posts. Therefore, I think it would be interesting to train a ML model that can identify the sentiment for Twitter. Then, I will apply the model to the hold-out data from both Twitter and Reddit data to understand if the sentiment in Twitter can be generalized for Reddit comments.
+This kaggle dataset (https://www.kaggle.com/cosmos98/twitter-and-reddit-sentimental-analysis-dataset) contains clean text and sentiment of posts from Reddit and Twitter. Twitter also has way more data points than Reddit posts. Therefore, I think it would be interesting to train a ML model that can identify the sentiment for Twitter. Then, I will apply the model to the hold-out data from both Twitter and Reddit data to understand if the sentiment in Twitter can be generalized for Reddit comments. I think this is an interesting question no matter the performance of reddit comments is similar or worse than the twitter data. If the performance of twitter posts is way better than the performance of reddit comments, that means there are something that is not generalizable between twitter posts and reddit comments, and it would be interesting to find out what causes the differences. However, if the performance of the model is similar between twitter and redddit, then it means that the sentiment people convey are consistent and generalizable no matter where they are posting. 
 
 # Description of the data
 
 ```{r}
 library(tidyverse)
+library(caret)
+library(recipes)
+library(finalfit)
+library(glmnet)
 
 reddit <- read.csv("./data/Reddit_Data.csv")
 twitter <- read.csv("./data/Twitter_Data.csv")
@@ -28,18 +32,15 @@ ggplot(reddit, aes(x = category)) + geom_histogram(bins = 5) + theme_minimal()
 ggplot(twitter, aes(x = category)) + geom_histogram(bins = 5) + theme_minimal()
 ```
 
-From the figure, we can see three problems:
+For both twitter and reddit data, there are 2 columns. The first column is clean text, and the second column is the sentiment (-1: negative; 0: neutral; 1: positive). There is no missing data. 
+
+From the figures, we can also see three problems:
 
 Firstly, there is also a neutral category that I am not interested in, so I will remove the neutral category and change the label into either 1 (positive) or 0 (negative). 
 
 Secondly, the data is relatively large in size (with 162980 rows for twitter, and 37249 for reddit), and it will take a long time to process. I decided to perform a subsampling for the purpose of the current project.
 
 Thirdly, there is an imbalance in data between positive and negative content, but because I am going to perform a subsampling, this is no longer a problem. I will randomly sampled 500 positive and 500 negative posts from Twitter. I will use 750 twitter posts for training, and 250 for testing. I will also test the model on 125 positive and 125 negative comments from Reddit. 
-
-```{r}
-set.seed(315)
-```
-
 
 ```{r, eval=FALSE}
 twitter_positive = twitter %>% filter(category == 1) %>% sample_n(500)
@@ -121,18 +122,203 @@ sub_reddit = rbind(r_p, r_n)
 save.image(file='./data/roberta-base_output.RData')
 ```
 
+```{r}
+set.seed(315)
+remove("reddit")
+remove("twitter")
+```
+
 Read in the processed data set from local file:
 ```{r}
 load("./data/roberta-base_output.RData")
 ```
 
+```{r}
+loc      <- sample(1:nrow(sub_twitter), round(nrow(sub_twitter) * 0.75))
+twitter_train  <- sub_twitter[loc, ]
+twitter_test  <- sub_twitter[-loc, ]
+```
+
+Now we have one data frame named 'twitter_train', that contains 750 rows of data for training. It has 768 columns of dimensions created from NLP, as well as one column that indicates the outcomes as either positive or negative.
+
 # Description of the models
 
+### Set up the blueprint and cross-validations
 
+```{r}
+blueprint <- recipe(x     = twitter_train,
+                    vars  = colnames(twitter_train),
+                    roles = c(rep('predictor',768),'outcome')) %>%
+  step_zv(paste0('Dim',1:768)) %>%
+  step_nzv(paste0('Dim',1:768)) %>%
+  step_normalize(paste0('Dim',1:768)) %>%
+  step_num2factor(sentiment,
+                  transform = function(x) x + 1,
+                  levels=c('Negative','Positive'))
+
+# Cross validation settings
+  
+# Randomly shuffle the data
+
+twitter_train = twitter_train[sample(nrow(twitter_train)),]
+
+# Create 10 folds with equal size
+
+folds = cut(seq(1,nrow(twitter_train)),breaks=10,labels=FALSE)
+
+# Create the list for each fold 
+
+my.indices <- vector('list',10)
+for(i in 1:10){
+  my.indices[[i]] <- which(folds!=i)
+}
+
+cv <- trainControl(method    = "cv",
+                   index           = my.indices,
+                   classProbs      = TRUE,
+                   summaryFunction = mnLogLoss)
+
+```
+
+### Logistic Regression (No Penalty)
+
+I firstly conducted a most basic logistic regression. This is selected because the outcome is binary. There is no hyperparameteres to be optimized. The model will use the training data to estimate the weight for each feature and try to conclude whether these featuers indicates the comment is more likely to be positive or negative with a percentage. 
+
+```{r, eval=FALSE}
+
+# Train the model
+
+vanilla <- train(blueprint, 
+                data      = twitter_train, 
+                method    = "glmnet",
+                family    = 'binomial',
+                metric    = 'logLoss',
+                trControl = cv)
+
+plot(vanilla)
+
+vanilla$bestTune
+```
+
+### Logistic Regression (Elastic Net)
+
+I secondly tired a elastic net logistic regre
+
+```{r, eval=FALSE}
+grid <- expand.grid(alpha = seq(0,.8,.01), lambda = seq(0,.001,.001)) 
+    
+# Train the model
+
+elastic <- train(blueprint, 
+                data      = twitter_train, 
+                method    = "glmnet",
+                family    = 'binomial',
+                metric    = 'logLoss',
+                trControl = cv,
+                tuneGrid  = grid)
+
+save(elastic, file = "./data/elastic1.RData")
+```
+
+
+```{r}
+load(file = "./data/elastic1.RData")
+
+plot(elastic)
+
+elastic$bestTune
+```
+
+From the previous model, we see that alpha = 0.01 and lambda = 0.001 gives the best results, but we only tried two different labmdas, so I will try another model with alpha fixed at 0.01, but test more lambdas. 
+
+```{r}
+grid <- expand.grid(alpha = 0.01, lambda = seq(0,.1,.001)) 
+    
+# Train the model
+
+elastic <- train(blueprint, 
+                data      = twitter_train, 
+                method    = "glmnet",
+                family    = 'binomial',
+                metric    = 'logLoss',
+                trControl = cv,
+                tuneGrid  = grid)
+
+elastic
+
+# check the results
+
+plot(elastic)
+
+elastic$bestTune
+```
+
+It seems like lambda does not have a big influence in model. We will proceed with alpha = 0.01, and lambda = 0.1 for the elastic net logistic model. 
+
+### Bagged forest
+
+```{r}
+
+grid <- expand.grid(mtry = ncol(twitter_train)-1,
+                    splitrule='gini',
+                    min.node.size=2)
+
+bags <- caret::train(blueprint,
+                     data = twitter_train,
+                     method = 'ranger',
+                     trControl = cv,
+                     tuneGrid = grid,
+                     num.trees = 500,
+                     max.depth = 60)
+```
 
 # Model fit
 
+### Logistic Regression (Ridge Penalty)
 
+Predict twitter data: 
+```{r}
+predicted_twitter <- predict(ridge, twitter_test, type='prob')
+predicted_reddit <- predict(ridge, reddit, type='prob')
+
+cut.obj <- cutpointr(x     = predicted_twitter$Positive,
+                     class = twitter_test$sentiment)
+
+ridge_auc = auc(cut.obj)
+
+ridge_auc
+
+# Confusion matrix
+
+pred_class <- ifelse(predicted_twitter$Positive>.5,1,0)
+
+ridge_confusion <- table(twitter_test$sentiment,pred_class)
+
+ridge_confusion
+
+ridge_ACC = (ridge_confusion[2,2]+ridge_confusion[1,1])/sum(ridge_confusion)
+
+ridge_ACC
+
+ridge_TPR = ridge_confusion[2,2]/(ridge_confusion[2,1]+ridge_confusion[2,2])
+
+ridge_TPR
+
+ridge_TNR = ridge_confusion[1,1]/(ridge_confusion[1,1]+ridge_confusion[1,2])
+
+ridge_TNR
+
+ridge_PRE = ridge_confusion[2,2]/(ridge_confusion[1,2]+ridge_confusion[2,2])
+
+ridge_PRE
+```
+
+
+### Logistic Regression (Elastic Net)
+
+```{r}
+
+```
 
 # Data visualization
 
