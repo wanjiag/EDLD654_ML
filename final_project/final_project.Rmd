@@ -1,0 +1,143 @@
+---
+title: "final_project"
+author: "Wanjia Guo"
+date: "12/9/2021"
+output: html_document
+---
+
+# Research problem
+
+This kaggle dataset (https://www.kaggle.com/cosmos98/twitter-and-reddit-sentimental-analysis-dataset) contains clean text and sentiment of posts from Reddit and Twitter. Twitter also has way more data points than Reddit posts. Therefore, I think it would be interesting to train a ML model that can identify the sentiment for Twitter. Then, I will apply the model to the hold-out data from both Twitter and Reddit data to understand if the sentiment in Twitter can be generalized for Reddit comments.
+
+# Description of the data
+
+```{r}
+library(tidyverse)
+
+reddit <- read.csv("./data/Reddit_Data.csv")
+twitter <- read.csv("./data/Twitter_Data.csv")
+
+head(reddit)
+head(twitter)
+```
+
+
+```{r}
+ggplot(reddit, aes(x = category)) + geom_histogram(bins = 5) + theme_minimal()
+
+ggplot(twitter, aes(x = category)) + geom_histogram(bins = 5) + theme_minimal()
+```
+
+From the figure, we can see three problems:
+
+Firstly, there is also a neutral category that I am not interested in, so I will remove the neutral category and change the label into either 1 (positive) or 0 (negative). 
+
+Secondly, the data is relatively large in size (with 162980 rows for twitter, and 37249 for reddit), and it will take a long time to process. I decided to perform a subsampling for the purpose of the current project.
+
+Thirdly, there is an imbalance in data between positive and negative content, but because I am going to perform a subsampling, this is no longer a problem. I will randomly sampled 500 positive and 500 negative posts from Twitter. I will use 750 twitter posts for training, and 250 for testing. I will also test the model on 125 positive and 125 negative comments from Reddit. 
+
+```{r}
+set.seed(315)
+```
+
+
+```{r, eval=FALSE}
+twitter_positive = twitter %>% filter(category == 1) %>% sample_n(500)
+twitter_negative = twitter %>% filter(category == 0) %>% sample_n(500)
+
+reddit_positive = reddit %>% filter(category == 1) %>% sample_n(125)
+reddit_negative = reddit %>% filter(category == 0) %>% sample_n(125)
+```
+
+Then, I ran the NLP analysis on all 4 data sets to translate the sentences into numeric characters. 
+
+Loading necessary packages:
+
+```{r, eval=FALSE}
+library(reticulate)
+path_to_env <- "/usr/local/anaconda3/envs/r.python/"
+use_condaenv(path_to_env)
+py_discover_config()
+
+import('numpy')
+import('transformers')
+import('nltk')
+import('tokenizers')
+import('torch')
+
+library(text)
+```
+
+Performing NLP with roberta-base:
+
+```{r, eval=FALSE}
+t_positive = map(twitter_positive$clean_text, textEmbed, 
+                  model = 'roberta-base',
+                  layers = 12,
+                  context_aggregation_layers = 'concatenate')
+
+t_negative = map(twitter_negative$clean_text, textEmbed, 
+                  model = 'roberta-base',
+                  layers = 12,
+                  context_aggregation_layers = 'concatenate')
+
+r_positive = map(reddit_positive$clean_comment, textEmbed, 
+                  model = 'roberta-base',
+                  layers = 12,
+                  context_aggregation_layers = 'concatenate')
+
+r_negative = map(reddit_negative$clean_comment, textEmbed, 
+                  model = 'roberta-base',
+                  layers = 12,
+                  context_aggregation_layers = 'concatenate')
+```
+
+Organizing dataframes and save the data locally:
+
+```{r, eval=FALSE}
+t_p = t(sapply(t_positive, `[[`, 1)) %>% 
+  data.frame()  %>% 
+  map_dfr(as.numeric) %>% 
+  mutate(sentiment = 1) 
+
+t_n = t(sapply(t_negative, `[[`, 1)) %>% 
+  data.frame()  %>% 
+  map_dfr(as.numeric) %>% 
+  mutate(sentiment = 0)
+
+r_p = t(sapply(r_positive, `[[`, 1)) %>% 
+  data.frame()  %>% 
+  map_dfr(as.numeric) %>% 
+  mutate(sentiment = 1) 
+
+r_n = t(sapply(r_negative, `[[`, 1)) %>% 
+  data.frame()  %>% 
+  map_dfr(as.numeric) %>% 
+  mutate(sentiment = 1) 
+
+sub_twitter = rbind(t_p, t_n)
+sub_reddit = rbind(r_p, r_n)
+
+save.image(file='./data/roberta-base_output.RData')
+```
+
+Read in the processed data set from local file:
+```{r}
+load("./data/roberta-base_output.RData")
+```
+
+# Description of the models
+
+
+
+# Model fit
+
+
+
+# Data visualization
+
+
+# Discussion / Conclusion
+
+
+# Reproducibility
