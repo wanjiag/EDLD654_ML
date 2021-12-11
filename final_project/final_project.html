@@ -777,6 +777,7 @@ ggplot(summary_df_long, aes(x = predicted, y = value, color = model_name)) +
 </div>
 <div id="reproducibility" class="section level1">
 <h1>Reproducibility</h1>
+<p><strong>This script include ‘eval = FALSE’ for some sections, mostly the NLP transformation and model fitting, to save the run time across re-knit. The NLP transformation results are in included in the data folder, but the model fitting results are not, due to their sizes. If you see a line of code that load from ‘./data/models/’, then the code will not run. Instead, please change the eval of the previous R section into TRUE to run and save the corresponding model locally.</strong></p>
 </div>
 
 

@@ -8,6 +8,5 @@
 \f0\fs24 \cf0 Reddit_Data.csv: original reddit comments data\
 Twitter_Data.csv: original twitter posts data\
 sub_reddit.RData: randomly selected 125 positive and 125 negative reddit comment, transformed with Roberta-base.\
-\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
-\cf0 sub_reddit.RData: randomly selected 500 positive and 500 negative twitter posts, transformed with Roberta-base.\
-**The script include \'91eval = FALSE\'92 for some sections, mostly the NLP transformation and model fitting. The NLP transformation results in included in this data folder, but the model fitting results are not. If you see a line of code with load() but cannot load the model, please change the eval of the previous R section into TRUE**}
+sub_reddit.RData: randomly selected 500 positive and 500 negative twitter posts, transformed with Roberta-base.\
+**This script include \'91eval = FALSE\'92 for some sections, mostly the NLP transformation and model fitting, to save the run time across re-knit. The NLP transformation results are in included in this data folder, but the model fitting results are not, due to their sizes. If you see a line of code that load from './data/models/', then the code will not run. Instead, please change the eval of the previous R section into TRUE to run and save the corresponding model locally.**}
