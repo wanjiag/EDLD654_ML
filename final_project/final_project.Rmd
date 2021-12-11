@@ -1,5 +1,5 @@
 ---
-title: "final_project"
+title: "Final Project"
 author: "Wanjia Guo"
 date: "12/9/2021"
 output: html_document
@@ -13,10 +13,6 @@ This kaggle dataset (https://www.kaggle.com/cosmos98/twitter-and-reddit-sentimen
 
 ```{r}
 library(tidyverse)
-library(caret)
-library(recipes)
-library(finalfit)
-library(glmnet)
 
 reddit <- read.csv("./data/Reddit_Data.csv")
 twitter <- read.csv("./data/Twitter_Data.csv")
@@ -36,13 +32,15 @@ For both twitter and reddit data, there are 2 columns. The first column is clean
 
 From the figures, we can also see three problems:
 
-Firstly, there is also a neutral category that I am not interested in, so I will remove the neutral category and change the label into either 1 (positive) or 0 (negative). 
+Firstly, there is also a neutral category that I am not interested in, so I will firstly remove the neutral category and replace all label into either 1 (positive) or 0 (negative). 
 
 Secondly, the data is relatively large in size (with 162980 rows for twitter, and 37249 for reddit), and it will take a long time to process. I decided to perform a subsampling for the purpose of the current project.
 
 Thirdly, there is an imbalance in data between positive and negative content, but because I am going to perform a subsampling, this is no longer a problem. I will randomly sampled 500 positive and 500 negative posts from Twitter. I will use 750 twitter posts for training, and 250 for testing. I will also test the model on 125 positive and 125 negative comments from Reddit. 
 
 ```{r, eval=FALSE}
+set.seed(315)
+
 twitter_positive = twitter %>% filter(category == 1) %>% sample_n(500)
 twitter_negative = twitter %>% filter(category == 0) %>% sample_n(500)
 
@@ -63,7 +61,6 @@ py_discover_config()
 import('numpy')
 import('transformers')
 import('nltk')
-import('tokenizers')
 import('torch')
 
 library(text)
@@ -91,6 +88,7 @@ r_negative = map(reddit_negative$clean_comment, textEmbed,
                   model = 'roberta-base',
                   layers = 12,
                   context_aggregation_layers = 'concatenate')
+
 ```
 
 Organizing dataframes and save the data locally:
@@ -114,12 +112,14 @@ r_p = t(sapply(r_positive, `[[`, 1)) %>%
 r_n = t(sapply(r_negative, `[[`, 1)) %>% 
   data.frame()  %>% 
   map_dfr(as.numeric) %>% 
-  mutate(sentiment = 1) 
+  mutate(sentiment = 0) 
 
 sub_twitter = rbind(t_p, t_n)
 sub_reddit = rbind(r_p, r_n)
 
-save.image(file='./data/roberta-base_output.RData')
+save(sub_twitter, file = "./data/sub_twitter.RData")
+save(sub_reddit, file = "./data/sub_reddit.RData")
+
 ```
 
 ```{r}
@@ -130,7 +130,8 @@ remove("twitter")
 
 Read in the processed data set from local file:
 ```{r}
-load("./data/roberta-base_output.RData")
+load("./data/sub_twitter.RData")
+load("./data/sub_reddit.RData")
 ```
 
 ```{r}
@@ -144,6 +145,16 @@ Now we have one data frame named 'twitter_train', that contains 750 rows of data
 # Description of the models
 
 ### Set up the blueprint and cross-validations
+
+```{r}
+library(caret)
+library(recipes)
+library(finalfit)
+library(glmnet)
+library(cutpointr)
+library(ranger)
+```
+
 
 ```{r}
 blueprint <- recipe(x     = twitter_train,
@@ -185,7 +196,6 @@ cv <- trainControl(method    = "cv",
 I firstly conducted a most basic logistic regression. This is selected because the outcome is binary. There is no hyperparameteres to be optimized. The model will use the training data to estimate the weight for each feature and try to conclude whether these featuers indicates the comment is more likely to be positive or negative with a percentage. 
 
 ```{r, eval=FALSE}
-
 # Train the model
 
 vanilla <- train(blueprint, 
@@ -195,14 +205,17 @@ vanilla <- train(blueprint,
                 metric    = 'logLoss',
                 trControl = cv)
 
-plot(vanilla)
+save(vanilla, file = "./data/models/vanilla.RData")
+```
 
-vanilla$bestTune
+
+```{r}
+load(file = "./data/models/vanilla.RData")
 ```
 
 ### Logistic Regression (Elastic Net)
 
-I secondly tired a elastic net logistic regre
+I secondly tired a elastic net logistic regression. The reason for choosing this model is because the vanilla model tends to cause overfitting issue. The elastic net contains two different kinds of penalty:  and lasso, and the percentage of each penalty (alpha) is a hyperpameter that needs to be tested and decided. The other hyperparameter that needs to be tested is lambda, which indicates how strong the penalty is for large coefficients for features. Otherwise, it carries a very similar mechanisms as the vanilla logistic regression. 
 
 ```{r, eval=FALSE}
 grid <- expand.grid(alpha = seq(0,.8,.01), lambda = seq(0,.001,.001)) 
@@ -217,12 +230,12 @@ elastic <- train(blueprint,
                 trControl = cv,
                 tuneGrid  = grid)
 
-save(elastic, file = "./data/elastic1.RData")
+save(elastic, file = "./data/models/elastic1.RData")
 ```
 
 
 ```{r}
-load(file = "./data/elastic1.RData")
+load(file = "./data/models/elastic1.RData")
 
 plot(elastic)
 
@@ -231,7 +244,7 @@ elastic$bestTune
 
 From the previous model, we see that alpha = 0.01 and lambda = 0.001 gives the best results, but we only tried two different labmdas, so I will try another model with alpha fixed at 0.01, but test more lambdas. 
 
-```{r}
+```{r, eval = FALSE}
 grid <- expand.grid(alpha = 0.01, lambda = seq(0,.1,.001)) 
     
 # Train the model
@@ -244,7 +257,11 @@ elastic <- train(blueprint,
                 trControl = cv,
                 tuneGrid  = grid)
 
-elastic
+save(elastic, file = "./data/models/elastic2.RData")
+```
+
+```{r}
+load(file = "./data/models/elastic2.RData")
 
 # check the results
 
@@ -255,75 +272,331 @@ elastic$bestTune
 
 It seems like lambda does not have a big influence in model. We will proceed with alpha = 0.01, and lambda = 0.1 for the elastic net logistic model. 
 
-### Bagged forest
+### Bagged tree
 
-```{r}
+Next, I will test on a bagged tree Bagged tree is a type of tree model. The tree model will test all possible ways to separate data into various categories and decide the outcome through assigning each sample into a particular category based on the features. In addition to the vanilla tree model, the bagged tree utilize bootstraping for the data points and use only a subset of data for each tree, with a lot of trees in total. Through aggregating over all trees, each with a different subset of the sample, the bagged tree achieved a better ability in generalization than normal tree models. The most important hyperparameter that we need to adjust for bagged tree models is the number of trees. 
 
+```{r, eval = FALSE}
 grid <- expand.grid(mtry = ncol(twitter_train)-1,
                     splitrule='gini',
                     min.node.size=2)
 
-bags <- caret::train(blueprint,
-                     data = twitter_train,
-                     method = 'ranger',
-                     trControl = cv,
-                     tuneGrid = grid,
-                     num.trees = 500,
-                     max.depth = 60)
+bags <- vector('list',7)
+
+for(i in c(10,50,100,200,300,400,500)){
+  
+  bags[[i]] <- caret::train(blueprint,
+                            data      = twitter_train,
+                            method    = 'ranger',
+                            trControl = cv,
+                            tuneGrid  = grid,
+                            metric = 'logLoss',
+                            num.trees = i,
+                            max.depth = 60)
+}
+
+bags = bags[lengths(bags) != 0]
+
+save(bags, file = "./data/models/bags.RData")
 ```
+
+```{r}
+load(file = "./data/models/bags.RData")
+
+logLoss_ <- c()
+
+for(i in 1:7){
+  
+  logLoss_[i] = bags[[i]]$results$logLoss
+  
+}
+
+logLoss_
+
+which.min(logLoss_)
+```
+
+Out of all 7 models I tried, the model with 400 trees achieved the lowest loss, or best results. 
 
 # Model fit
 
-### Logistic Regression (Ridge Penalty)
+I will calculate the Logloss, AUC, ACC, TPR, TNR, and PRE for each model. The cut off is 0.5 because when I take sample from the data, I choose equal amount of positive and negative posts. 
+
+### Logistic Regression (No penalty)
 
 Predict twitter data: 
-```{r}
-predicted_twitter <- predict(ridge, twitter_test, type='prob')
-predicted_reddit <- predict(ridge, reddit, type='prob')
 
-cut.obj <- cutpointr(x     = predicted_twitter$Positive,
+```{r}
+
+twitter_vanilla_predicted <- predict(vanilla, twitter_test, type='prob')
+
+cut.obj <- cutpointr(x     = twitter_vanilla_predicted$Positive,
                      class = twitter_test$sentiment)
 
-ridge_auc = auc(cut.obj)
+twitter_vanilla_auc = auc(cut.obj)
 
-ridge_auc
+twitter_vanilla_auc
 
 # Confusion matrix
 
-pred_class <- ifelse(predicted_twitter$Positive>.5,1,0)
+twitter_vanilla_pred_class <- ifelse(twitter_vanilla_predicted$Positive>.5,1,0)
 
-ridge_confusion <- table(twitter_test$sentiment,pred_class)
+twitter_vanilla_confusion <- table(twitter_test$sentiment,twitter_vanilla_pred_class)
 
-ridge_confusion
+twitter_vanilla_confusion
 
-ridge_ACC = (ridge_confusion[2,2]+ridge_confusion[1,1])/sum(ridge_confusion)
+twitter_vanilla_ACC = (twitter_vanilla_confusion[2,2]+twitter_vanilla_confusion[1,1])/sum(twitter_vanilla_confusion)
 
-ridge_ACC
+twitter_vanilla_ACC
 
-ridge_TPR = ridge_confusion[2,2]/(ridge_confusion[2,1]+ridge_confusion[2,2])
+twitter_vanilla_TPR = twitter_vanilla_confusion[2,2]/(twitter_vanilla_confusion[2,1]+twitter_vanilla_confusion[2,2])
 
-ridge_TPR
+twitter_vanilla_TPR
 
-ridge_TNR = ridge_confusion[1,1]/(ridge_confusion[1,1]+ridge_confusion[1,2])
+twitter_vanilla_TNR = twitter_vanilla_confusion[1,1]/(twitter_vanilla_confusion[1,1]+twitter_vanilla_confusion[1,2])
 
-ridge_TNR
+twitter_vanilla_TNR
 
-ridge_PRE = ridge_confusion[2,2]/(ridge_confusion[1,2]+ridge_confusion[2,2])
+twitter_vanilla_PRE = twitter_vanilla_confusion[2,2]/(twitter_vanilla_confusion[1,2]+twitter_vanilla_confusion[2,2])
 
-ridge_PRE
+twitter_vanilla_PRE
 ```
 
-
-### Logistic Regression (Elastic Net)
+Predict reddit data: 
 
 ```{r}
 
+reddit_vanilla_predicted_reddit <- predict(vanilla, sub_reddit, type='prob')
+
+cut.obj <- cutpointr(x     = reddit_vanilla_predicted_reddit$Positive,
+                     class = sub_reddit$sentiment)
+
+reddit_vanilla_auc = auc(cut.obj)
+
+reddit_vanilla_auc
+
+# Confusion matrix
+
+reddit_pred_class <- ifelse(reddit_vanilla_predicted_reddit$Positive>.5,1,0)
+
+reddit_vanilla_confusion <- table(sub_reddit$sentiment,reddit_pred_class)
+
+reddit_vanilla_confusion
+
+reddit_vanilla_ACC = (reddit_vanilla_confusion[2,2]+reddit_vanilla_confusion[1,1])/sum(reddit_vanilla_confusion)
+
+reddit_vanilla_ACC
+
+reddit_vanilla_TPR = reddit_vanilla_confusion[2,2]/(reddit_vanilla_confusion[2,1]+reddit_vanilla_confusion[2,2])
+
+reddit_vanilla_TPR
+
+reddit_vanilla_TNR = reddit_vanilla_confusion[1,1]/(reddit_vanilla_confusion[1,1]+reddit_vanilla_confusion[1,2])
+
+reddit_vanilla_TNR
+
+reddit_vanilla_PRE = reddit_vanilla_confusion[2,2]/(reddit_vanilla_confusion[1,2]+reddit_vanilla_confusion[2,2])
+
+reddit_vanilla_PRE
+```
+
+### Logistic Regression (Elastic Net)
+
+Predict twitter data: 
+
+```{r}
+twitter_elastic_predicted <- predict(elastic, twitter_test, type='prob')
+
+cut.obj <- cutpointr(x     = twitter_elastic_predicted$Positive,
+                     class = twitter_test$sentiment)
+
+twitter_elastic_auc = auc(cut.obj)
+
+twitter_elastic_auc
+
+# Confusion matrix
+
+twitter_elastic_pred_class <- ifelse(twitter_elastic_predicted$Positive>.5,1,0)
+
+twitter_elastic_confusion <- table(twitter_test$sentiment,twitter_elastic_pred_class)
+
+twitter_elastic_confusion
+
+twitter_elastic_ACC = (twitter_elastic_confusion[2,2]+twitter_elastic_confusion[1,1])/sum(twitter_elastic_confusion)
+
+twitter_elastic_ACC
+
+twitter_elastic_TPR = twitter_elastic_confusion[2,2]/(twitter_elastic_confusion[2,1]+twitter_elastic_confusion[2,2])
+
+twitter_elastic_TPR
+
+twitter_elastic_TNR = twitter_elastic_confusion[1,1]/(twitter_elastic_confusion[1,1]+twitter_elastic_confusion[1,2])
+
+twitter_elastic_TNR
+
+twitter_elastic_PRE = twitter_elastic_confusion[2,2]/(twitter_elastic_confusion[1,2]+twitter_elastic_confusion[2,2])
+
+twitter_elastic_PRE
+```
+
+Predict reddit data:
+
+```{r}
+reddit_elastic_predicted <- predict(elastic, sub_reddit, type='prob')
+
+cut.obj <- cutpointr(x     = reddit_elastic_predicted$Positive,
+                     class = sub_reddit$sentiment)
+
+reddit_elastic_auc = auc(cut.obj)
+
+reddit_elastic_auc
+
+# Confusion matrix
+
+reddit_elastic_pred_class <- ifelse(reddit_elastic_predicted$Positive>.5,1,0)
+
+reddit_elastic_confusion <- table(sub_reddit$sentiment,reddit_elastic_pred_class)
+
+reddit_elastic_confusion
+
+reddit_elastic_ACC = (reddit_elastic_confusion[2,2]+reddit_elastic_confusion[1,1])/sum(reddit_elastic_confusion)
+
+reddit_elastic_ACC
+
+reddit_elastic_TPR = reddit_elastic_confusion[2,2]/(reddit_elastic_confusion[2,1]+reddit_elastic_confusion[2,2])
+
+reddit_elastic_TPR
+
+reddit_elastic_TNR = reddit_elastic_confusion[1,1]/(reddit_elastic_confusion[1,1]+reddit_elastic_confusion[1,2])
+
+reddit_elastic_TNR
+
+reddit_elastic_PRE = reddit_elastic_confusion[2,2]/(reddit_elastic_confusion[1,2]+reddit_elastic_confusion[2,2])
+
+reddit_elastic_PRE
+```
+
+### Bagged tree
+
+Predict twitter data: 
+
+```{r}
+
+twitter_bag_predicted <- predict(bags[[6]], twitter_test, type='prob')
+
+cut.obj <- cutpointr(x     = twitter_bag_predicted$Positive,
+                     class = twitter_test$sentiment)
+
+twitter_bag_auc = auc(cut.obj)
+
+twitter_bag_auc
+
+# Confusion matrix
+
+twitter_bag_pred_class <- ifelse(twitter_bag_predicted$Positive>.5,1,0)
+
+twitter_bag_confusion <- table(twitter_test$sentiment,twitter_bag_pred_class)
+
+twitter_bag_confusion
+
+twitter_bag_ACC = (twitter_bag_confusion[2,2]+twitter_bag_confusion[1,1])/sum(twitter_bag_confusion)
+
+twitter_bag_ACC
+
+twitter_bag_TPR = twitter_bag_confusion[2,2]/(twitter_bag_confusion[2,1]+twitter_bag_confusion[2,2])
+
+twitter_bag_TPR
+
+twitter_bag_TNR = twitter_bag_confusion[1,1]/(twitter_bag_confusion[1,1]+twitter_bag_confusion[1,2])
+
+twitter_bag_TNR
+
+twitter_bag_PRE = twitter_bag_confusion[2,2]/(twitter_bag_confusion[1,2]+twitter_bag_confusion[2,2])
+
+twitter_bag_PRE
+```
+
+Predict reddit data:
+
+```{r}
+reddit_bag_predicted <- predict(bags[[6]], sub_reddit, type='prob')
+
+cut.obj <- cutpointr(x     = reddit_bag_predicted$Positive,
+                     class = sub_reddit$sentiment)
+
+reddit_bag_auc = auc(cut.obj)
+
+reddit_bag_auc
+
+# Confusion matrix
+
+reddit_bag_pred_class <- ifelse(reddit_bag_predicted$Positive>.5,1,0)
+
+reddit_bag_confusion <- table(sub_reddit$sentiment,reddit_bag_pred_class)
+
+reddit_bag_confusion
+
+reddit_bag_ACC = (reddit_bag_confusion[2,2]+reddit_bag_confusion[1,1])/sum(reddit_bag_confusion)
+
+reddit_bag_ACC
+
+reddit_bag_TPR = reddit_bag_confusion[2,2]/(reddit_bag_confusion[2,1]+reddit_bag_confusion[2,2])
+
+reddit_bag_TPR
+
+reddit_bag_TNR = reddit_bag_confusion[1,1]/(reddit_bag_confusion[1,1]+reddit_bag_confusion[1,2])
+
+reddit_bag_TNR
+
+reddit_bag_PRE = reddit_bag_confusion[2,2]/(reddit_bag_confusion[1,2]+reddit_bag_confusion[2,2])
+
+reddit_bag_PRE
+```
+
+
+```{r}
+model_name <- c('Logistic Regression', 'Logistic Regression', 'Elastic Net', 'Elastic Net', 'Bagged Tree', 'Bagged Tree')
+predicted <- c('twitter', 'reddit', 'twitter', 'reddit', 'twitter', 'reddit')
+
+LL <- c(vanilla$results$logLoss %>% min(), 
+        vanilla$results$logLoss %>% min(), 
+        elastic$results %>% filter(lambda == elastic$bestTune$lambda) %>% .$logLoss,
+        elastic$results %>% filter(lambda == elastic$bestTune$lambda) %>% .$logLoss,
+        bags[[6]]$results$logLoss,
+        bags[[6]]$results$logLoss)
+AUC <- c(twitter_vanilla_auc, reddit_vanilla_auc, twitter_elastic_auc, 
+         reddit_elastic_auc, twitter_bag_auc, reddit_bag_auc)
+ACC <- c(twitter_vanilla_ACC, reddit_vanilla_ACC, twitter_elastic_ACC, 
+         reddit_elastic_ACC, twitter_bag_ACC, reddit_bag_ACC)
+TPR <- c(twitter_vanilla_TPR, reddit_vanilla_TPR, twitter_elastic_TPR, 
+         reddit_elastic_TPR, twitter_bag_TPR, reddit_bag_TPR)
+TNR <- c(twitter_vanilla_TNR, reddit_vanilla_TNR, twitter_elastic_TNR, 
+         reddit_elastic_TNR, twitter_bag_TNR, reddit_bag_TNR)
+PRE <- c(twitter_vanilla_PRE, reddit_vanilla_PRE, twitter_elastic_PRE, 
+         reddit_elastic_PRE, twitter_bag_PRE, reddit_bag_PRE)
+
+summary_df <- data.frame(model_name, predicted, LL, AUC, ACC, TPR, TNR, PRE)
+
+summary_df
 ```
 
 # Data visualization
 
+Figures are included in the previous and next section. 
 
 # Discussion / Conclusion
 
+```{r}
+
+summary_df_long = summary_df %>% pivot_longer(cols = LL:PRE, names_to = 'type', values_to = 'value')
+
+ggplot(summary_df_long, aes(x = predicted, y = value, color = model_name)) + 
+  geom_point() + 
+  facet_wrap(~type, scales = 'free_y')+
+  theme_minimal()+
+  theme(legend.position = 'bottom')
+```
+
+I found these results really interesting. It seems like overall, the performance of twitter is either similar to or better than the reddit. It makes sense because all models are trained solely on twitter posts data. Therefore, the data taken from the same source (also twitter posts) also have better performance than data taken from a different posts (reddit posts in this example). however, the differences between twitter and reddit are really not as big as I expected! Across 3 models I tried, bagged model performed extremely well for twitter data, but it probably suffered from overfitting as the performance is also the worst for reddit data. Overall, elastic net has the best performance when considering both the reddit and twitter data predictions. Regarding the important features, because I transformed the sentence data into NLP dimentions, the meaning of the dimentions is not really intepretable. 
 
 # Reproducibility
